@@ -1,6 +1,8 @@
 using System.Net.WebSockets;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddTransient<WsAudioIngestHandler>();
+builder.Services.AddTransient<WsEchoHandler>();
 var app = builder.Build();
 
 app.MapGet("/", () => "Hello World!");
@@ -19,13 +21,12 @@ app.MapPost(
 
 app.UseWebSockets();
 
+
 // Audio ingest endpoint (PCM or ADPCM).
 app.MapGet(
     "/ws",
-    async (HttpContext context) =>
+    async (HttpContext context, WsAudioIngestHandler handler) =>
     {
-        var logger = context.RequestServices.GetRequiredService<ILogger<WsAudioIngestHandler>>();
-        var handler = new WsAudioIngestHandler(logger);
         await handler.HandleAsync(context, null);
     }
 );
@@ -33,20 +34,17 @@ app.MapGet(
 // Audio ingest endpoint with HWID in the path.
 app.MapGet(
     "/ws/{hwid}",
-    async (HttpContext context, string hwid) =>
+    async (HttpContext context, string hwid, WsAudioIngestHandler handler) =>
     {
-        var logger = context.RequestServices.GetRequiredService<ILogger<WsAudioIngestHandler>>();
-        var handler = new WsAudioIngestHandler(logger);
         await handler.HandleAsync(context, hwid);
     }
 );
 
+
 app.MapGet(
     "/ws/echo",
-    async (HttpContext context) =>
+    async (HttpContext context, WsEchoHandler handler) =>
     {
-        var logger = context.RequestServices.GetRequiredService<ILogger<WsEchoHandler>>();
-        var handler = new WsEchoHandler(logger);
         await handler.HandleAsync(context);
     }
 );
