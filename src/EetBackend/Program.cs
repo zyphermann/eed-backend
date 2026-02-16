@@ -19,6 +19,7 @@ app.MapPost(
 
 app.UseWebSockets();
 
+// Audio ingest endpoint (PCM or ADPCM).
 app.MapGet(
     "/ws",
     async (HttpContext context) =>
@@ -29,6 +30,7 @@ app.MapGet(
     }
 );
 
+// Audio ingest endpoint with HWID in the path.
 app.MapGet(
     "/ws/{hwid}",
     async (HttpContext context, string hwid) =>
@@ -39,6 +41,7 @@ app.MapGet(
     }
 );
 
+// Simple WebSocket echo endpoint for testing.
 app.MapGet(
     "/ws/echo",
     async (HttpContext context) =>

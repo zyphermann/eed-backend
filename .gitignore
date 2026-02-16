@@ -19,3 +19,5 @@ __pycache__/
 # Logs / outputs
 data/streams/
 data/received/
+src/EetBackend/data/received/
+src/EetBackend/data/streams/

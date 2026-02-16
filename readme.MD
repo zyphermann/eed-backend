@@ -1,27 +1,27 @@
-# Architektur
+# Architecture
 
-Ziel: C#-Backend, das mehrere WebSocket-Streams mit Audio-Daten (PCM oder ADPCM) empfangen kann, plus ein kleiner Python-Client, der WAV-Dateien aus dem `data`-Ordner liest und als Stream(s) an den Server sendet.
+Goal: a C# backend that can receive multiple WebSocket audio streams (PCM or ADPCM), plus a small Python client that reads WAV files from the `data/` folder and streams them to the server.
 
-## Komponenten
+## Components
 
-1. **C# WebSocket-Server**
-   - Läuft als eigenständiger Service.
-   - Nimmt mehrere WebSocket-Verbindungen parallel an.
-   - Pro Verbindung: Empfang von PCM- oder ADPCM-Frames in einem definierten Frame-Container.
-   - Initiales Handshake-Frame mit Stream-Metadaten.
-   - Schreibt empfangene Frames in rotierende Dateien (z. B. alle 10 Sekunden) für spätere Verarbeitung.
+1. **C# WebSocket Server**
+   - Runs as a standalone service.
+   - Accepts multiple WebSocket connections in parallel.
+   - Per connection: receives PCM or ADPCM frames in a defined frame container.
+   - Initial handshake frame with stream metadata.
+   - Writes received frames into rotating files (e.g. every 10 seconds) for later processing.
 
-2. **Python-Streaming-Client**
-   - Lädt eine WAV-Datei aus `data/`.
-   - Optional: PCM oder ADPCM (IMA ADPCM) streaming.
-   - Sendet PCM- oder ADPCM-Frames über WebSocket an den Server.
-   - Unterstützt mehrere parallele Streams:
-     - Per CLI-Parameter `--streams N` (startet N parallele Verbindungen).
-     - Alternativ mehrfach starten.
+2. **Python Streaming Client**
+   - Loads a WAV file from `data/`.
+   - Optional: streams PCM or ADPCM (IMA ADPCM).
+   - Sends PCM or ADPCM frames over WebSocket to the server.
+   - Supports multiple parallel streams:
+     - via CLI parameter `--streams N` (starts N parallel connections),
+     - or by starting the client multiple times.
 
-3. **Gemeinsames Protokoll**
-   - WebSocket + binäre Frames.
-   - Initiales Handshake-Frame (binär, 32 Bytes, little-endian):
+3. **Shared Protocol**
+   - WebSocket + binary frames.
+   - Initial handshake frame (binary, 32 bytes, little-endian):
      - `uint32 magic` = `0x41445043` ("ADPC")
      - `uint16 version` = `1`
      - `uint16 header_len` = `32`
@@ -32,27 +32,28 @@ Ziel: C#-Backend, das mehrere WebSocket-Streams mit Audio-Daten (PCM oder ADPCM)
      - `uint16 frame_samples`
      - `uint16 reserved` = 0
      - `uint64 timestamp_ms`
-   - Audio-Frame (binär, pro WebSocket-Message):
-     - `uint32 magic` = `0x41445046` ("ADPF") für ADPCM
-     - `uint32 magic` = `0x464D4350` ("PCMF") für PCM
-     - `uint32 length` (Payload-Länge in Bytes)
-     - `uint32 seq` (laufende Nummer)
-     - `bytes payload` (PCM16 oder ADPCM)
-   - Backpressure: Client wartet auf Sende-Puffer; Server liest asynchron.
-   - Persistenz: Frames werden inklusive Magic/Length/Seq in Dateien geschrieben, Rotation ca. alle 10 Sekunden.
-   - Zusätzlich wird eine PCM-WAV-Datei pro Rotation erzeugt (PCM direkt, ADPCM wird decodiert).
+   - Audio frame (binary, per WebSocket message):
+     - `uint32 magic` = `0x41445046` ("ADPF") for ADPCM
+     - `uint32 magic` = `0x464D4350` ("PCMF") for PCM
+     - `uint32 length` (payload length in bytes)
+     - `uint32 seq` (sequence number)
+     - `bytes payload` (PCM16 or ADPCM)
+   - Backpressure: client waits for send buffer; server reads asynchronously.
+   - Persistence: frames (magic/length/seq + payload) are written to files, rotating ~every 10 seconds.
+   - Additionally, a PCM WAV file is produced per rotation (PCM direct, ADPCM decoded).
 
-## Datenfluss
+## Data Flow
 
-`WAV (PCM) -> (optional ADPCM) -> WebSocket -> Server Receiver -> Datei-Rotation + WAV`
+`WAV (PCM) -> (optional ADPCM) -> WebSocket -> Server Receiver -> file rotation + WAV`
 
-## Verzeichnisstruktur
+## Layout
 
-- `src/` C# Server-Code
-- `client/` Python-Client
-- `data/` Test-WAV-Dateien
+- `src/` C# server code
+- `client/` Python client
+- `data/` Test WAV files
+- `data/received/{hwid}/` Rotated stream outputs (ignored by git)
 
-## Lokales Setup
+## Local Setup
 
 ### Server
 
@@ -61,10 +62,10 @@ cd src/EetBackend
 dotnet run
 ```
 
-WebSocket-Endpunkte:
-- `ws://localhost:5096/ws` (Audio-Stream)
-- `ws://localhost:5096/ws/{hwid}` (Audio-Stream mit Hardware-ID)
-- `ws://localhost:5096/ws/echo` (Echo)
+WebSocket endpoints:
+- `ws://localhost:5096/ws` (audio stream)
+- `ws://localhost:5096/ws/{hwid}` (audio stream with hardware ID)
+- `ws://localhost:5096/ws/echo` (echo)
 
 HTTP:
 - `POST http://localhost:5096/echo`
@@ -82,12 +83,12 @@ Start (ADPCM, default):
 .venv/bin/python client/stream_client.py --wav data/sine_pcm16.wav --codec adpcm
 ```
 
-Beispiel mit Hardware-ID:
+Example with hardware ID:
 ```bash
 .venv/bin/python client/stream_client.py --wav data/sine_pcm16.wav --codec pcm --url ws://localhost:5096/ws/ABC123-DEVICE
 ```
 
-Start (PCM, verlustfrei):
+Start (PCM, lossless):
 ```bash
 .venv/bin/python client/stream_client.py --wav data/sine_pcm16.wav --codec pcm
 ```

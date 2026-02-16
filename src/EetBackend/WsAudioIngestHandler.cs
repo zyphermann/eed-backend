@@ -34,7 +34,9 @@ public sealed class WsAudioIngestHandler
         long totalBytes = 0;
         long totalPcmBytes = 0;
         var env = context.RequestServices.GetRequiredService<IHostEnvironment>();
-        var baseDir = Path.Combine(env.ContentRootPath, "data", "received");
+        var projectRoot =
+            Directory.GetParent(env.ContentRootPath)?.Parent?.FullName ?? env.ContentRootPath;
+        var baseDir = Path.Combine(projectRoot, "data", "received");
         var streamDir = hwidTag is null ? baseDir : Path.Combine(baseDir, hwidTag);
         Directory.CreateDirectory(streamDir);
         FileStream? currentFile = null;
@@ -46,6 +48,7 @@ public sealed class WsAudioIngestHandler
         {
             while (true)
             {
+                // Reassemble fragmented WebSocket messages into a single payload.
                 var message = await ReceiveFullMessageAsync(ws, buffer, context.RequestAborted);
                 if (message is null)
                 {
@@ -74,6 +77,7 @@ public sealed class WsAudioIngestHandler
                 }
 
                 var data = msg.Payload;
+                // First binary message must be the handshake.
                 if (handshake is null)
                 {
                     if (!TryParseHandshake(data, out var hs))
@@ -108,6 +112,7 @@ public sealed class WsAudioIngestHandler
                     continue;
                 }
 
+                // All following messages must be audio frames.
                 if (!TryParseAudioFrame(data, out var frame))
                 {
                     await ws.CloseAsync(
@@ -155,6 +160,7 @@ public sealed class WsAudioIngestHandler
                 var now = DateTime.UtcNow;
                 if (currentFile is null || (now - currentFileStartUtc) >= RotationInterval)
                 {
+                    // Rotate output files every interval.
                     currentFile?.Dispose();
                     wavWriter?.Dispose();
                     currentFileStartUtc = now;
@@ -199,12 +205,14 @@ public sealed class WsAudioIngestHandler
                 {
                     if (handshake.Value.Codec == 0)
                     {
+                        // PCM frames can be written directly.
                         var pcm = frame.Payload.ToArray();
                         await wavWriter.WriteAsync(pcm, context.RequestAborted);
                         totalPcmBytes += pcm.Length;
                     }
                     else
                     {
+                        // ADPCM frames must be decoded to PCM.
                         if (!TryDecodeImaAdpcm(frame.Payload, out var pcm))
                         {
                             _logger.LogWarning(
@@ -366,6 +374,7 @@ public sealed class WsAudioIngestHandler
 
     private static string? SanitizeTag(string? value)
     {
+        // Keep filenames safe and predictable.
         if (string.IsNullOrWhiteSpace(value))
         {
             return null;
