@@ -21,7 +21,6 @@ app.MapPost(
 
 app.UseWebSockets();
 
-
 // Audio ingest endpoint (PCM or ADPCM).
 app.MapGet(
     "/ws",
@@ -31,15 +30,14 @@ app.MapGet(
     }
 );
 
-// Audio ingest endpoint with HWID in the path.
+// Audio ingest endpoint with hardwareId in the path.
 app.MapGet(
-    "/ws/{hwid}",
-    async (HttpContext context, string hwid, WsAudioIngestHandler handler) =>
+    "/ws/{hardwareId}",
+    async (HttpContext context, string hardwareId, WsAudioIngestHandler handler) =>
     {
-        await handler.HandleAsync(context, hwid);
+        await handler.HandleAsync(context, hardwareId);
     }
 );
-
 
 app.MapGet(
     "/ws/echo",
