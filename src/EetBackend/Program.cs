@@ -23,11 +23,19 @@ app.MapGet(
     "/ws",
     async (HttpContext context) =>
     {
-        var logger = context.RequestServices.GetRequiredService<
-            ILogger<WsAudioIngestHandler>
-        >();
+        var logger = context.RequestServices.GetRequiredService<ILogger<WsAudioIngestHandler>>();
         var handler = new WsAudioIngestHandler(logger);
-        await handler.HandleAsync(context);
+        await handler.HandleAsync(context, null);
+    }
+);
+
+app.MapGet(
+    "/ws/{hwid}",
+    async (HttpContext context, string hwid) =>
+    {
+        var logger = context.RequestServices.GetRequiredService<ILogger<WsAudioIngestHandler>>();
+        var handler = new WsAudioIngestHandler(logger);
+        await handler.HandleAsync(context, hwid);
     }
 );
 

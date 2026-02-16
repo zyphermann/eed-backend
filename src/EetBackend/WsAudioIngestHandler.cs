@@ -17,8 +17,9 @@ public sealed class WsAudioIngestHandler
         _logger = logger;
     }
 
-    public async Task HandleAsync(HttpContext context)
+    public async Task HandleAsync(HttpContext context, string? hwid)
     {
+        var hwidTag = SanitizeTag(hwid);
         if (!context.WebSockets.IsWebSocketRequest)
         {
             context.Response.StatusCode = StatusCodes.Status400BadRequest;
@@ -32,7 +33,9 @@ public sealed class WsAudioIngestHandler
         long totalFrames = 0;
         long totalBytes = 0;
         long totalPcmBytes = 0;
-        var streamDir = Path.Combine(AppContext.BaseDirectory, "data", "streams");
+        var env = context.RequestServices.GetRequiredService<IHostEnvironment>();
+        var baseDir = Path.Combine(env.ContentRootPath, "data", "received");
+        var streamDir = hwidTag is null ? baseDir : Path.Combine(baseDir, hwidTag);
         Directory.CreateDirectory(streamDir);
         FileStream? currentFile = null;
         WavWriter? wavWriter = null;
@@ -155,7 +158,9 @@ public sealed class WsAudioIngestHandler
                     currentFile?.Dispose();
                     wavWriter?.Dispose();
                     currentFileStartUtc = now;
-                    var fileName = $"stream_{handshake.Value.StreamId}_{now:yyyyMMdd_HHmmss}.bin";
+                    var fileName = hwidTag is null
+                        ? $"stream_{handshake.Value.StreamId}_{now:yyyyMMdd_HHmmss}.bin"
+                        : $"stream_{handshake.Value.StreamId}_{hwidTag}_{now:yyyyMMdd_HHmmss}.bin";
                     var path = Path.Combine(streamDir, fileName);
                     currentFile = new FileStream(
                         path,
@@ -173,17 +178,19 @@ public sealed class WsAudioIngestHandler
                             16
                         );
                         _logger.LogInformation(
-                            "Opened new WAV file stream_id={StreamId} path={Path}",
-                            handshake.Value.StreamId,
-                            wavPath
-                        );
-                    }
-                    _logger.LogInformation(
-                        "Opened new stream file stream_id={StreamId} path={Path}",
+                        "Opened new WAV file stream_id={StreamId} hwid={Hwid} path={Path}",
                         handshake.Value.StreamId,
-                        path
+                        hwidTag ?? "-",
+                        wavPath
                     );
                 }
+                _logger.LogInformation(
+                    "Opened new stream file stream_id={StreamId} hwid={Hwid} path={Path}",
+                    handshake.Value.StreamId,
+                    hwidTag ?? "-",
+                    path
+                );
+            }
 
                 await currentFile!.WriteAsync(frame.Raw, context.RequestAborted);
                 await currentFile.FlushAsync(context.RequestAborted);
@@ -222,8 +229,9 @@ public sealed class WsAudioIngestHandler
             if (handshake is not null)
             {
                 _logger.LogInformation(
-                    "Stream closed stream_id={StreamId} frames={Frames} bytes={Bytes} pcm_bytes={PcmBytes}",
+                    "Stream closed stream_id={StreamId} hwid={Hwid} frames={Frames} bytes={Bytes} pcm_bytes={PcmBytes}",
                     handshake.Value.StreamId,
+                    hwidTag ?? "-",
                     totalFrames,
                     totalBytes,
                     totalPcmBytes
@@ -354,6 +362,30 @@ public sealed class WsAudioIngestHandler
         int expectedMin = 4;
         int expectedMax = expectedMin + (hs.FrameSamples * hs.Channels / 2) + 16;
         return frame.Payload.Length >= expectedMin && frame.Payload.Length <= expectedMax;
+    }
+
+    private static string? SanitizeTag(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        Span<char> buffer = stackalloc char[value.Length];
+        int len = 0;
+        foreach (var ch in value)
+        {
+            if (char.IsLetterOrDigit(ch) || ch == '-' || ch == '_')
+            {
+                buffer[len++] = ch;
+            }
+            else if (ch == ':' || ch == '.')
+            {
+                buffer[len++] = '_';
+            }
+        }
+
+        return len == 0 ? null : new string(buffer.Slice(0, len));
     }
 
     private static bool TryDecodeImaAdpcm(ReadOnlySpan<byte> adpcm, out byte[] pcm)

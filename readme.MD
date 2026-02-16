@@ -63,6 +63,7 @@ dotnet run
 
 WebSocket-Endpunkte:
 - `ws://localhost:5096/ws` (Audio-Stream)
+- `ws://localhost:5096/ws/{hwid}` (Audio-Stream mit Hardware-ID)
 - `ws://localhost:5096/ws/echo` (Echo)
 
 HTTP:
@@ -79,6 +80,11 @@ python3 -m pip install -r client/requirements.txt
 Start (ADPCM, default):
 ```bash
 .venv/bin/python client/stream_client.py --wav data/sine_pcm16.wav --codec adpcm
+```
+
+Beispiel mit Hardware-ID:
+```bash
+.venv/bin/python client/stream_client.py --wav data/sine_pcm16.wav --codec pcm --url ws://localhost:5096/ws/ABC123-DEVICE
 ```
 
 Start (PCM, verlustfrei):
