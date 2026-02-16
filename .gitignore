@@ -1,0 +1,20 @@
+# .NET
+bin/
+obj/
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+
+# OS
+.DS_Store
+
+# Logs / outputs
+data/streams/
