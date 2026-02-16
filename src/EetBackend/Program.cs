@@ -1,4 +1,5 @@
 using Amazon;
+using Amazon.Runtime;
 using Amazon.S3;
 using DotNetEnv;
 using Microsoft.Extensions.Options;
@@ -17,17 +18,12 @@ Environment.SetEnvironmentVariable("S3__Provider", s3Provider);
 // Map Scaleway env vars to AWS-compatible ones if provider=scaleway and AWS vars are not set.
 if (string.Equals(s3Provider, "scaleway", StringComparison.OrdinalIgnoreCase))
 {
-    var awsAccess = Environment.GetEnvironmentVariable("AWS_ACCESS_KEY_ID");
-    var awsSecret = Environment.GetEnvironmentVariable("AWS_SECRET_ACCESS_KEY");
-    if (string.IsNullOrWhiteSpace(awsAccess) && string.IsNullOrWhiteSpace(awsSecret))
+    var scwAccess = Environment.GetEnvironmentVariable("SCW_ACCESS_KEY");
+    var scwSecret = Environment.GetEnvironmentVariable("SCW_SECRET_KEY");
+    if (!string.IsNullOrWhiteSpace(scwAccess) && !string.IsNullOrWhiteSpace(scwSecret))
     {
-        var scwAccess = Environment.GetEnvironmentVariable("SCW_ACCESS_KEY");
-        var scwSecret = Environment.GetEnvironmentVariable("SCW_SECRET_KEY");
-        if (!string.IsNullOrWhiteSpace(scwAccess) && !string.IsNullOrWhiteSpace(scwSecret))
-        {
-            Environment.SetEnvironmentVariable("AWS_ACCESS_KEY_ID", scwAccess);
-            Environment.SetEnvironmentVariable("AWS_SECRET_ACCESS_KEY", scwSecret);
-        }
+        Environment.SetEnvironmentVariable("AWS_ACCESS_KEY_ID", scwAccess);
+        Environment.SetEnvironmentVariable("AWS_SECRET_ACCESS_KEY", scwSecret);
     }
 }
 
@@ -51,8 +47,22 @@ SetIfEmpty("S3__Enabled", Environment.GetEnvironmentVariable("S3_ENABLED"));
 SetIfEmpty("S3__Prefix", Environment.GetEnvironmentVariable("S3_PREFIX"));
 SetIfEmpty("S3__UploadBin", Environment.GetEnvironmentVariable("S3_UPLOADBIN"));
 SetIfEmpty("S3__UploadWav", Environment.GetEnvironmentVariable("S3_UPLOADWAV"));
-SetIfEmpty("S3_BUCKET", Environment.GetEnvironmentVariable("AWS_BUCKET"));
-SetIfEmpty("S3_REGION", Environment.GetEnvironmentVariable("AWS_REGION"));
+if (string.Equals(s3Provider, "scaleway", StringComparison.OrdinalIgnoreCase))
+{
+    Environment.SetEnvironmentVariable("S3_BUCKET", Environment.GetEnvironmentVariable("SCW_BUCKET"));
+    Environment.SetEnvironmentVariable("S3_REGION", Environment.GetEnvironmentVariable("SCW_REGION"));
+    Environment.SetEnvironmentVariable("S3_SERVICE_URL", Environment.GetEnvironmentVariable("SCW_SERVICE_URL"));
+    Environment.SetEnvironmentVariable(
+        "S3_FORCE_PATH_STYLE",
+        Environment.GetEnvironmentVariable("SCW_FORCE_PATH_STYLE")
+    );
+}
+else
+{
+    SetIfEmpty("S3_BUCKET", Environment.GetEnvironmentVariable("AWS_BUCKET"));
+    SetIfEmpty("S3_REGION", Environment.GetEnvironmentVariable("AWS_REGION"));
+}
+
 SetIfEmpty("S3__Bucket", Environment.GetEnvironmentVariable("S3_BUCKET"));
 SetIfEmpty("S3__Region", Environment.GetEnvironmentVariable("S3_REGION"));
 SetIfEmpty("S3__ServiceUrl", Environment.GetEnvironmentVariable("S3_SERVICE_URL"));
@@ -80,18 +90,7 @@ SetConfigIfPresent("S3:UploadWav", "S3__UploadWav");
 
 builder.Configuration.AddEnvironmentVariables();
 
-if (string.Equals(s3Provider, "scaleway", StringComparison.OrdinalIgnoreCase))
-{
-    SetIfEmpty("S3__Bucket", Environment.GetEnvironmentVariable("SCW_BUCKET"));
-    SetIfEmpty("S3__Region", Environment.GetEnvironmentVariable("SCW_REGION"));
-    SetIfEmpty("S3__ServiceUrl", Environment.GetEnvironmentVariable("SCW_SERVICE_URL"));
-    SetIfEmpty("S3__ForcePathStyle", Environment.GetEnvironmentVariable("SCW_FORCE_PATH_STYLE"));
-}
-else
-{
-    SetIfEmpty("S3__Bucket", Environment.GetEnvironmentVariable("AWS_BUCKET"));
-    SetIfEmpty("S3__Region", Environment.GetEnvironmentVariable("AWS_REGION"));
-}
+// Provider-specific values are now mapped above.
 builder.Services.Configure<S3Options>(builder.Configuration.GetSection("S3"));
 builder.Services.AddSingleton<IAmazonS3>(sp =>
 {
@@ -101,8 +100,17 @@ builder.Services.AddSingleton<IAmazonS3>(sp =>
         var config = new AmazonS3Config
         {
             ServiceURL = options.ServiceUrl,
-            ForcePathStyle = options.ForcePathStyle
+            ForcePathStyle = options.ForcePathStyle,
+            AuthenticationRegion = options.Region
         };
+        var accessKeyId = Environment.GetEnvironmentVariable("AWS_ACCESS_KEY_ID");
+        var secretKey = Environment.GetEnvironmentVariable("AWS_SECRET_ACCESS_KEY");
+        if (!string.IsNullOrWhiteSpace(accessKeyId) && !string.IsNullOrWhiteSpace(secretKey))
+        {
+            var creds = new BasicAWSCredentials(accessKeyId, secretKey);
+            return new AmazonS3Client(creds, config);
+        }
+
         return new AmazonS3Client(config);
     }
 
@@ -139,6 +147,13 @@ startupLogger.LogInformation(
     s3Options.UploadWav,
     hasAccessKey,
     accessKeySuffix
+);
+startupLogger.LogInformation(
+    "S3 config provider={Provider} service_url={ServiceUrl} force_path_style={ForcePathStyle} auth_region={AuthRegion}",
+    s3Options.Provider,
+    s3Options.ServiceUrl ?? "-",
+    s3Options.ForcePathStyle,
+    s3Options.Region
 );
 
 app.MapGet("/", () => "Hello World!");
