@@ -70,6 +70,42 @@ WebSocket endpoints:
 HTTP:
 - `POST http://localhost:5096/echo`
 
+### S3 Uploads (optional)
+
+The server can upload rotated files to S3. Configure via `appsettings.json` or environment variables:
+
+- `S3:Enabled` = `true`
+- `S3:Bucket` = `eet.zentronic.at`
+- `S3:Region` = `eu-west-1`
+- `S3:Prefix` = `received`
+- `S3:UploadBin` / `S3:UploadWav`
+
+Credentials are read from environment variables:
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
+- `AWS_SESSION_TOKEN` (optional)
+- `AWS_PROFILE` (optional, to select a specific AWS CLI profile)
+
+You can place these in a `.env` file (loaded on startup via DotNetEnv), for example:
+
+```
+AWS_ACCESS_KEY_ID=...
+AWS_SECRET_ACCESS_KEY=...
+AWS_SESSION_TOKEN=...
+AWS_PROFILE=eet-demo
+```
+
+If you already use AWS CLI for another project, configure a dedicated profile and reference it from `.env`:
+
+```bash
+aws configure --profile eet-demo
+```
+
+Then set in `.env`:
+```
+AWS_PROFILE=eet-demo
+```
+
 ### Client
 
 ```bash

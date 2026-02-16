@@ -11,10 +11,18 @@ public sealed class WsAudioIngestHandler
     private static readonly TimeSpan RotationInterval = TimeSpan.FromSeconds(10);
 
     private readonly ILogger<WsAudioIngestHandler> _logger;
+    private readonly S3FileUploader _uploader;
+    private readonly S3Options _s3Options;
 
-    public WsAudioIngestHandler(ILogger<WsAudioIngestHandler> logger)
+    public WsAudioIngestHandler(
+        ILogger<WsAudioIngestHandler> logger,
+        S3FileUploader uploader,
+        Microsoft.Extensions.Options.IOptions<S3Options> s3Options
+    )
     {
         _logger = logger;
+        _uploader = uploader;
+        _s3Options = s3Options.Value;
     }
 
     public async Task HandleAsync(HttpContext context, string? hwid)
@@ -40,7 +48,9 @@ public sealed class WsAudioIngestHandler
         var streamDir = hwidTag is null ? baseDir : Path.Combine(baseDir, hwidTag);
         Directory.CreateDirectory(streamDir);
         FileStream? currentFile = null;
+        string? currentFilePath = null;
         WavWriter? wavWriter = null;
+        string? currentWavPath = null;
         bool wavEnabled = false;
         DateTime currentFileStartUtc = DateTime.MinValue;
 
@@ -161,13 +171,30 @@ public sealed class WsAudioIngestHandler
                 if (currentFile is null || (now - currentFileStartUtc) >= RotationInterval)
                 {
                     // Rotate output files every interval.
-                    currentFile?.Dispose();
-                    wavWriter?.Dispose();
+                    if (currentFile is not null)
+                    {
+                        currentFile.Dispose();
+                        if (currentFilePath is not null)
+                        {
+                            await UploadIfEnabledAsync(currentFilePath, hwidTag, context.RequestAborted);
+                        }
+                    }
+
+                    if (wavWriter is not null)
+                    {
+                        wavWriter.Dispose();
+                        if (currentWavPath is not null)
+                        {
+                            await UploadIfEnabledAsync(currentWavPath, hwidTag, context.RequestAborted);
+                        }
+                    }
+
                     currentFileStartUtc = now;
                     var fileName = hwidTag is null
                         ? $"stream_{handshake.Value.StreamId}_{now:yyyyMMdd_HHmmss}.bin"
                         : $"stream_{handshake.Value.StreamId}_{hwidTag}_{now:yyyyMMdd_HHmmss}.bin";
                     var path = Path.Combine(streamDir, fileName);
+                    currentFilePath = path;
                     currentFile = new FileStream(
                         path,
                         FileMode.CreateNew,
@@ -177,6 +204,7 @@ public sealed class WsAudioIngestHandler
                     if (wavEnabled)
                     {
                         var wavPath = Path.ChangeExtension(path, ".wav");
+                        currentWavPath = wavPath;
                         wavWriter = new WavWriter(
                             wavPath,
                             (int)handshake.Value.SampleRate,
@@ -189,10 +217,10 @@ public sealed class WsAudioIngestHandler
                         hwidTag ?? "-",
                         wavPath
                     );
-                }
-                _logger.LogInformation(
-                    "Opened new stream file stream_id={StreamId} hwid={Hwid} path={Path}",
-                    handshake.Value.StreamId,
+                    }
+                    _logger.LogInformation(
+                        "Opened new stream file stream_id={StreamId} hwid={Hwid} path={Path}",
+                        handshake.Value.StreamId,
                     hwidTag ?? "-",
                     path
                 );
@@ -232,8 +260,23 @@ public sealed class WsAudioIngestHandler
         }
         finally
         {
-            currentFile?.Dispose();
-            wavWriter?.Dispose();
+            if (currentFile is not null)
+            {
+                currentFile.Dispose();
+                if (currentFilePath is not null)
+                {
+                    await UploadIfEnabledAsync(currentFilePath, hwidTag, CancellationToken.None);
+                }
+            }
+
+            if (wavWriter is not null)
+            {
+                wavWriter.Dispose();
+                if (currentWavPath is not null)
+                {
+                    await UploadIfEnabledAsync(currentWavPath, hwidTag, CancellationToken.None);
+                }
+            }
             if (handshake is not null)
             {
                 _logger.LogInformation(
@@ -370,6 +413,32 @@ public sealed class WsAudioIngestHandler
         int expectedMin = 4;
         int expectedMax = expectedMin + (hs.FrameSamples * hs.Channels / 2) + 16;
         return frame.Payload.Length >= expectedMin && frame.Payload.Length <= expectedMax;
+    }
+
+    private async Task UploadIfEnabledAsync(string path, string? hwid, CancellationToken ct)
+    {
+        if (!_uploader.Enabled)
+        {
+            return;
+        }
+
+        var ext = Path.GetExtension(path).ToLowerInvariant();
+        if (ext == ".bin" && !_s3Options.UploadBin)
+        {
+            return;
+        }
+
+        if (ext == ".wav" && !_s3Options.UploadWav)
+        {
+            return;
+        }
+
+        var prefix = string.IsNullOrWhiteSpace(_s3Options.Prefix)
+            ? "received"
+            : _s3Options.Prefix.Trim().Trim('/');
+        var folder = hwid is null ? prefix : $"{prefix}/{hwid}";
+        var key = $"{folder}/{Path.GetFileName(path)}";
+        await _uploader.UploadIfEnabledAsync(path, key, ct);
     }
 
     private static string? SanitizeTag(string? value)

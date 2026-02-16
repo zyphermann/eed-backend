@@ -21,3 +21,6 @@ data/streams/
 data/received/
 src/EetBackend/data/received/
 src/EetBackend/data/streams/
+
+# Env files
+.env
