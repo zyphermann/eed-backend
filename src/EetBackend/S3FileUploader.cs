@@ -15,8 +15,7 @@ public sealed class S3FileUploader
         _logger = logger;
     }
 
-    public bool Enabled =>
-        _options.Enabled && !string.IsNullOrWhiteSpace(_options.Bucket);
+    public bool Enabled => _options.Enabled && !string.IsNullOrWhiteSpace(_options.Bucket);
 
     public async Task UploadIfEnabledAsync(string path, string key, CancellationToken ct)
     {
@@ -32,7 +31,7 @@ public sealed class S3FileUploader
                 BucketName = _options.Bucket,
                 Key = key,
                 FilePath = path,
-                StorageClass = S3StorageClass.Standard
+                StorageClass = S3StorageClass.Standard,
             };
 
             await _s3.PutObjectAsync(request, ct);

@@ -12,10 +12,10 @@ public static class Utils
         Environment.SetEnvironmentVariable("S3__Provider", s3Provider);
 
         // Map single-underscore env vars to .NET configuration keys.
-        Utils.SetIfEmpty("S3__Enabled", Environment.GetEnvironmentVariable("S3_ENABLED"));
-        Utils.SetIfEmpty("S3__Prefix", Environment.GetEnvironmentVariable("S3_PREFIX"));
-        Utils.SetIfEmpty("S3__UploadBin", Environment.GetEnvironmentVariable("S3_UPLOADBIN"));
-        Utils.SetIfEmpty("S3__UploadWav", Environment.GetEnvironmentVariable("S3_UPLOADWAV"));
+        SetIfEmpty("S3__Enabled", Environment.GetEnvironmentVariable("S3_ENABLED"));
+        SetIfEmpty("S3__Prefix", Environment.GetEnvironmentVariable("S3_PREFIX"));
+        SetIfEmpty("S3__UploadBin", Environment.GetEnvironmentVariable("S3_UPLOADBIN"));
+        SetIfEmpty("S3__UploadWav", Environment.GetEnvironmentVariable("S3_UPLOADWAV"));
 
         if (string.Equals(s3Provider, "scaleway", StringComparison.OrdinalIgnoreCase))
         {
@@ -47,17 +47,14 @@ public static class Utils
         }
         else
         {
-            Utils.SetIfEmpty("S3_BUCKET", Environment.GetEnvironmentVariable("AWS_BUCKET"));
-            Utils.SetIfEmpty("S3_REGION", Environment.GetEnvironmentVariable("AWS_REGION"));
+            SetIfEmpty("S3_BUCKET", Environment.GetEnvironmentVariable("AWS_BUCKET"));
+            SetIfEmpty("S3_REGION", Environment.GetEnvironmentVariable("AWS_REGION"));
         }
 
-        Utils.SetIfEmpty("S3__Bucket", Environment.GetEnvironmentVariable("S3_BUCKET"));
-        Utils.SetIfEmpty("S3__Region", Environment.GetEnvironmentVariable("S3_REGION"));
-        Utils.SetIfEmpty("S3__ServiceUrl", Environment.GetEnvironmentVariable("S3_SERVICE_URL"));
-        Utils.SetIfEmpty(
-            "S3__ForcePathStyle",
-            Environment.GetEnvironmentVariable("S3_FORCE_PATH_STYLE")
-        );
+        SetIfEmpty("S3__Bucket", Environment.GetEnvironmentVariable("S3_BUCKET"));
+        SetIfEmpty("S3__Region", Environment.GetEnvironmentVariable("S3_REGION"));
+        SetIfEmpty("S3__ServiceUrl", Environment.GetEnvironmentVariable("S3_SERVICE_URL"));
+        SetIfEmpty("S3__ForcePathStyle", Environment.GetEnvironmentVariable("S3_FORCE_PATH_STYLE"));
 
         SetConfigIfPresent("S3:Provider", "S3__Provider", builder);
         SetConfigIfPresent("S3:Enabled", "S3__Enabled", builder);
@@ -98,7 +95,6 @@ public static class Utils
             var region = RegionEndpoint.GetBySystemName(options.Region);
             return new AmazonS3Client(region);
         });
-
         builder.Services.AddSingleton<S3FileUploader>();
         builder.Services.AddTransient<WsAudioIngestHandler>();
         builder.Services.AddTransient<WsEchoHandler>();
